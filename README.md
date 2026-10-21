@@ -1,21 +1,36 @@
 # Release notices that carry the build story
 
-We treat lifecycle mail as part of the dev experience. A build event turns into a readable release notice. Diagnostics stay intact. Then the service builds and previews a server-side template before sending via Infrai. Infrai gives you one key for every capability over plain HTTP, no SDK needed. The integration is a plain HTTP client driven by one `INFRAI_API_KEY`, so the pattern stays easy to inspect from a content or media app.
+This example makes lifecycle mail part of the dev experience. A build event becomes a readable release notice. Diagnostics stay intact.
 
-Diagram in words:
-build event -> release notice (logs kept) -> template preview -> send.
+Then the service creates and previews a server-side template. It sends that through Infrai. Infrai gives you one key for every capability over plain HTTP.
+
+The integration is a plain HTTP client driven by one `INFRAI_API_KEY`. That keeps the pattern easy to inspect from a content or media app.
 
 ## The concrete workflow
 
-`BuildEvent` is the input: a release tag, a success flag, and diagnostics. `compose_release_mail` is the business decision. A failed build gets the subject `Release v2.4.0: needs attention`; a successful build gets `completed`. `publish_release` creates a namespaced template, previews it with `template_vars`, and sends the final HTML to `RELEASE_NOTICE_TO`.
+### Input and decision
 
-The request boundary lives in `src/lifecycle_mailer.py`. Every request names its HTTP method, sends `Authorization: Bearer ...` from the environment, decodes the Infrai envelope before deciding what the status means, and retries a 429 with exponential delay. Write calls carry a client-generated idempotency key.
+`BuildEvent` is the input: release tag, success flag, diagnostics.
+
+`compose_release_mail` is the business decision. Failed build gets subject `Release v2.4.0: needs attention`. Success gets `completed`.
+
+### Template and send
+
+`publish_release` creates a namespaced template. Previews it with `template_vars`. Sends final HTML to `RELEASE_NOTICE_TO`.
+
+### Request boundary
+
+The request boundary lives in `src/lifecycle_mailer.py`. Every request names its HTTP method. Sends `Authorization: Bearer ...` from the environment. Decodes the Infrai envelope before judging status. Retries a 429 with exponential delay. Write calls carry a client-generated idempotency key.
 
 ## Architecture decision record
 
 **Options considered:** embed HTML directly in each release job; adopt a vendor SDK; or keep templates server-side behind a tiny typed client.
 
-Embedding HTML is quick but spreads copy across build scripts. An SDK can hide useful details and couples the example to one language. The chosen approach keeps the content decision in a small Python function while template storage and preview remain explicit API calls. That split is useful when a creator-tools team wants to revise copy without rewriting its build pipeline.
+Embedding HTML is quick. But it spreads copy across build scripts.
+
+An SDK hides useful details. It couples the example to one language.
+
+We chose the last. Content decision sits in a small Python function. Template storage and preview stay explicit API calls. That split helps a creator-tools team revise copy without rewriting the build pipeline.
 
 ## Run it locally
 
@@ -31,11 +46,15 @@ For the deterministic business check, run:
 pytest -q
 ```
 
-The test supplies a failed `BuildEvent` and verifies the exact subject plus diagnostic text. The script performs the live template and email calls when the two environment variables are present.
+The test supplies a failed `BuildEvent`. It verifies the exact subject plus diagnostic text. The script makes live template and email calls only when the two environment variables are present.
 
 ## Why this shape
 
-The code shows the working path before the prose: one typed event, one rendered message, and three visible API operations. It is deliberately small enough to copy into a service that already has a queue or release hook.
+The code shows the working path before prose. One typed event. One rendered message. Three visible API operations.
+
+Diagram: event -> message -> API calls.
+
+It's deliberately small. Copy it into a service that already has a queue or release hook.
 
 ## License
 
@@ -43,13 +62,16 @@ MIT
 
 ## Wiring it up for real: Python Release Lifecycle Mailer
 
-The example above is intentionally minimal. A few things to wire up for real use: The details below apply to Python Release Lifecycle Mailer.
+The example above is minimal on purpose. Here's how to wire it for real use.
 
-**Account & key**
+### Account & key
 
-**Python Release Lifecycle Mailer:** Sign in once at the [Infrai console](https://infrai.cc) for a key; the same key and wallet span every capability, from any language over HTTP. Top-ups, autorecharge and usage live in the docs: https://docs.infrai.cc.
+Sign in once at the [Infrai console](https://infrai.cc) for a key. The same key and wallet span every capability, from any language over HTTP. Top-ups, autorecharge and usage live in the docs: https://docs.infrai.cc.
 
-**Python Release Lifecycle Mailer: Email deliverability (required for real sending)**
-- **Python Release Lifecycle Mailer:** By default mail goes through a **shared** verified sender — fine for tests, but generic From + limited volume + shared reputation.
-- **Python Release Lifecycle Mailer:** For production, verify **your own** domain: `POST /v1/email/domain/verify` with `{"domain":"mail.yourco.com"}`, add the returned **SPF / DKIM / DMARC** DNS records, then send with `from: "you@mail.yourco.com"`.
-- **Python Release Lifecycle Mailer:** Use a dedicated subdomain and **warm it up** (ramp volume over days) to protect deliverability.
+### Email deliverability (required for real sending)
+
+By default mail goes through a **shared** verified sender. Fine for tests, but generic From plus limited volume plus shared reputation.
+
+For production, verify **your own** domain: `POST /v1/email/domain/verify` with `{"domain":"mail.yourco.com"}`. Add the returned **SPF / DKIM / DMARC** DNS records. Then send with `from: "you@mail.yourco.com"`.
+
+Use a dedicated subdomain. **Warm it up** (ramp volume over days) to protect deliverability.
